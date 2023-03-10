@@ -159,10 +159,16 @@ def sq_mhlnbs_dist( data_matrix, mean_vector, cov_inverse ):
     # (e.g., a sqared mahalanobis distance of 9 implies a point is sqrt(9) = 3 standard
     # deviations from the mean.
 
-    # Numpy 'broadcasting' insures that the mean vector is subtracted row-wise
+    # Numpy 'broadcasting' insures that the mean vector is subtracted row-wis
     diff = data_matrix - mean_vector
 
-    return np.min(diff,axis=1) 
+    right_product = np.dot(diff, cov_inverse) # I don't think numpy overloads '*' so I'll call it directly
+
+    left_product = diff * right_product # Apply the left side of the formula from the slides
+
+    mahalanobis_dist = np.sum(left_product) # and the distance is the summation of the vector
+
+    return mahalanobis_dist
 
 def gaussian( mean_density, distances ):
     # NOTE: distances is a column vector of squared mahalanobis distances
@@ -198,8 +204,40 @@ def map_classifier( priors, mean_vectors, covariance_pairs ):
         class_scores = np.zeros( ( num_samples, num_classes + 1 ) ) 
 
         #>>>>>>>>> EDIT THIS SECTION
-        
+
+        # so we have for us: covs and covs^-1, peak scores (?), distances, class_scores
         class_scores[:,-1] = np.zeros( num_samples)
+
+        # precompute the mahal distances
+        for sample_idx in range(num_samples):
+            for class_idx in range(num_classes):
+                distances[sample_idx, class_idx] = sq_mhlnbs_dist(data_matrix[sample_idx], #todo or use a sample?
+                                                                  mean_vectors[class_idx],
+                                                                  inv_covariances[class_idx]
+                                                                  )
+        for index in range(num_samples):
+
+            sample = data_matrix[index]
+
+            # we need to predict the prob of this sample being in each class, and pick the greatest one
+            sample_likely_classes = []
+            class_score_insert_vec = [sample[0], sample[1]]
+            for prior_index in range(num_classes):
+
+                prior = priors[prior_index]
+
+                # ramp up to the gaussian, prepare arguments
+                selected_cov_inv = inv_covariances[prior_index]
+
+                gaussian_prior = gaussian(mean_density(selected_cov_inv),distances[index, prior_index])
+
+                sample_likely_classes.append(prior * gaussian_prior)
+
+            class_score_insert_vec.append(sample_likely_classes)
+            class_score_insert_vec.append(max(sample_likely_classes))
+
+            class_scores[index] = np.array(class_score_insert_vec)
+
         
         #>>>>>>>>>> END SECTION TO EDIT
         
@@ -230,7 +268,13 @@ def bayes_classifier( cost_matrix, priors, mean_vectors, covariance_pairs ):
 
         #>>>>>>>>> EDIT THIS SECTION
         
-        class_costs_output[:,-1] = np.ones( num_samples )
+        class_costs_output[:,-1] = np.ones( num_samples ) #so this just setting it all to one by default
+
+        for index in range(num_samples):
+
+            sample = data_matrix[index]
+
+
         
         #>>>>>>>>>> END SECTION TO EDIT
 
